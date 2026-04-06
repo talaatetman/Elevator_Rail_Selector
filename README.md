@@ -1,4 +1,4 @@
-# 🏗️ Elevator Rail Selector & Engineering Engine v14.0
+# 🏗️ Elevator Rail Selector & Engineering Engine
 
 **أداة هندسية متطورة لاختيار وتحليل دلائل المصعد (Guide Rails) وفق المعايير العالمية EN 81-20 ومحاكاة تقارير Digipara.**
 
