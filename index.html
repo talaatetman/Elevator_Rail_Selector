@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>Elevator Rail Selector v1</title>
+    <style>
+        :root { --primary: #2c3e50; --accent: #27ae60; --error: #e74c3c; }
+        body { font-family: 'Segoe UI', Tahoma; background: #f4f7f6; padding: 20px; }
+        .selector-container { max-width: 900px; margin: auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border-top: 10px solid var(--primary); }
+        .header { text-align: center; margin-bottom: 25px; }
+        .input-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .group { display: flex; flex-direction: column; }
+        label { font-weight: bold; margin-bottom: 8px; color: var(--primary); font-size: 0.9rem; }
+        select, input { padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 1rem; }
+        button { background: var(--accent); color: white; padding: 15px; border: none; border-radius: 8px; cursor: pointer; font-size: 1.1rem; font-weight: bold; transition: 0.3s; width: 100%; }
+        button:hover { background: #219150; }
+        .result-card { margin-top: 25px; padding: 20px; border-radius: 10px; display: none; border: 2px solid #eee; }
+        .badge { padding: 5px 15px; border-radius: 20px; color: white; font-weight: bold; }
+        .safe { background: var(--accent); }
+        .unsafe { background: var(--error); }
+        table { width: 100%; margin-top: 15px; border-collapse: collapse; }
+        th, td { padding: 10px; border-bottom: 1px solid #eee; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="selector-container">
+    <div class="header">
+        <h2>أداة اختيار دليل المصعد الذكية 🛠️</h2>
+        <p>حدد الحمولة والمقاس لمعرفة مدى الأمان</p>
+    </div>
+
+    <div class="input-grid">
+        <div class="group">
+            <label>حمولة المصعد (كيلوجرام)</label>
+            <input type="number" id="loadQ" value="1000" placeholder="مثلاً: 1000">
+        </div>
+        <div class="group">
+            <label>اختر مقاس الدليل (Rail Type)</label>
+            <select id="railType">
+                <option value="T70">T70 (70x65x9)</option>
+                <option value="T82">T82 (82x68x9)</option>
+                <option value="T89" selected>T89 (89x62x16)</option>
+                <option value="T125">T125 (127x89x16)</option>
+            </select>
+        </div>
+        <div class="group">
+            <label>عمق الكابينة (سم)</label>
+            <input type="number" id="cabinDepth" value="140" placeholder="مثلاً: 140">
+        </div>
+        <div class="group">
+            <label>المسافة بين الكوابيل - الحطات (متر)</label>
+            <input type="number" id="spanInput" value="1.5" step="0.1">
+        </div>
+    </div>
+
+    <button onclick="runSmartAnalysis()">تحليل الدليل المختار</button>
+
+    <div id="resultBox" class="result-card">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h3 id="resTitle">نتائج الفحص</h3>
+            <span id="resBadge" class="badge">آمن</span>
+        </div>
+        <table id="resTable">
+            <!-- ستملأ البيانات هنا -->
+        </table>
+        <div id="advice" style="margin-top: 15px; font-style: italic; color: #555;"></div>
+    </div>
+</div>
+
+<script>
+// قاعدة بيانات الدلائل
+const railsDB = {
+    "T70":  { area: 940,  wy: 5900,  iy: 192000, imin: 14.3 },
+    "T82":  { area: 1090, wy: 8060,  iy: 304000, imin: 16.7 },
+    "T89":  { area: 1570, wy: 11800, iy: 525000, imin: 18.3 },
+    "T125": { area: 2250, wy: 24200, iy: 1510000, imin: 25.9 }
+};
+
+function runSmartAnalysis() {
+    // 1. جلب المدخلات
+    const Q = parseFloat(document.getElementById('loadQ').value);
+    const railKey = document.getElementById('railType').value;
+    const depth = parseFloat(document.getElementById('cabinDepth').value);
+    const span = parseFloat(document.getElementById('spanInput').value) * 1000;
+    
+    const rail = railsDB[railKey];
+    const P = Q * 0.75; // افتراض وزن الصاعدة 75% من الحمولة
+    const h = 2900; // مسافة الكراسي الافتراضية للشاسيه الكامل
+    
+    // 2. حساب اللامركزية تلقائياً (xQ)
+    // هندسياً: أقصى إزاحة للركاب هي 1/8 من عمق الكابينة
+    const xQ = (depth / 8) / 100; 
+
+    // 3. الحسابات الهندسية (v13.2 Logic)
+    const k1 = 3; 
+    const Fk = (k1 * 9.81 * (Q + P)) / 2;
+    const Fx = (k1 * 9.81 * (Q * xQ)) / (2 * (h/1000));
+    const My = (3 * Fx * span) / 16;
+    const Sig_bending = My / rail.wy;
+    
+    const lambda = span / rail.imin;
+    let omega = (lambda <= 60) ? (1 + 0.0001 * Math.pow(lambda, 2)) : (0.00012 * Math.pow(lambda, 2) + 1.1);
+    const Sig_buckling = (Fk * omega) / rail.area;
+    const Sig_total = Sig_buckling + (0.9 * Sig_bending);
+    const def = (0.7 * Fx * Math.pow(span, 3)) / (48 * 210000 * rail.iy);
+
+    // 4. عرض النتائج
+    const resBox = document.getElementById('resultBox');
+    const badge = document.getElementById('resBadge');
+    const isSafe = (Sig_total <= 165 && def <= 5);
+
+    resBox.style.display = "block";
+    badge.className = isSafe ? "badge safe" : "badge unsafe";
+    badge.innerText = isSafe ? "آمن ومطابق" : "غير آمن - خطر";
+    
+    document.getElementById('resTable').innerHTML = `
+        <tr><td>مقاس الدليل</td><td><b>${railKey}</b></td></tr>
+        <tr><td>الإجهاد الكلي</td><td>الحد المسموح: N/mm² 165</td><td>القيمة المحسوبة: ${Sig_total.toFixed(1)} N/mm²</td></tr>
+        <tr><td>انحناء الدليل</td><td>الحد المسموح: mm 5</td><td>القيمة المحسوبة: ${def.toFixed(2)} mm</td></tr>
+        <tr><td>الخلاصة</td><td>${isSafe ? 'يمكنك استخدامه بثقة' : 'يجب اختيار دليل أكبر أو تقليل المسافة'}</td></tr>
+    `;
+
+    // تقديم نصيحة ذكية
+    let adviceText = "";
+    if (!isSafe) {
+        if (def > 5) adviceText = "⚠️ المشكلة في 'الانحناء الجانبي'. حاول تقليل مسافة التثبيت إلى 1.2 متر.";
+        else adviceText = "⚠️ المشكلة في 'الإجهاد'. الدليل ضعيف جداً على هذه الحمولة، انتقل للمقاس التالي.";
+    } else {
+        adviceText = "✅ هذا الخيار ممتاز واقتصادي لهذه الحمولة.";
+    }
+    document.getElementById('advice').innerText = "نصيحة المهندس: " + adviceText;
+}
+</script>
+
+</body>
+</html>
