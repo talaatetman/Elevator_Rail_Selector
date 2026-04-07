@@ -20,6 +20,16 @@
         .unsafe { background: var(--error); }
         table { width: 100%; margin-top: 15px; border-collapse: collapse; }
         th, td { padding: 10px; border-bottom: 1px solid #eee; text-align: center; }
+        .footer-signature {
+        margin-top: 40px;
+        text-align: center;
+        padding: 20px;
+        background: #2c3e50;
+        color: white;
+        border-radius: 8px;
+        font-size: 18px;
+        letter-spacing: 1px;
+    }
     </style>
 </head>
 <body>
@@ -132,6 +142,8 @@ function runSmartAnalysis() {
     document.getElementById('advice').innerText = "نصيحة المهندس: " + adviceText;
 }
 </script>
-
+ <div class="footer-signature">
+        تصميم وإعداد: <strong>طلعت عتمان - ايلاف للمصاعد - مدونة المصاعد</strong>
+    </div>
 </body>
 </html>
