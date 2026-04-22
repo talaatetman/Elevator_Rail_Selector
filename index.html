@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elevator Rail Master v15.3</title>
+    <style>
+        :root { --primary: #1a2a6c; --success: #27ae60; --warning: #f39c12; --danger: #e74c3c; --light: #f4f7f6; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #dfe9f3; margin: 0; padding: 15px; color: #333; }
+        .app-container { max-width: 850px; margin: auto; background: white; border-radius: 20px; box-shadow: 0 15px 40px rgba(0,0,0,0.2); overflow: hidden; border-top: 10px solid var(--primary); }
+        .header { background: var(--primary); color: white; padding: 25px; text-align: center; }
+        .content { padding: 30px; }
+        .input-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
+        .group { display: flex; flex-direction: column; margin-bottom: 10px; }
+        label { font-weight: bold; margin-bottom: 8px; font-size: 0.85rem; color: var(--primary); }
+        input, select { padding: 12px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 1rem; transition: 0.3s; background: #fafafa; }
+        input:focus, select:focus { border-color: var(--primary); outline: none; background: #fff; }
+        button { width: 100%; padding: 18px; background: var(--primary); color: white; border: none; border-radius: 12px; font-size: 1.2rem; font-weight: bold; cursor: pointer; margin-top: 20px; transition: 0.3s; }
+        button:hover { background: #0d1a4a; transform: translateY(-2px); }
+        .result-card { margin-top: 30px; padding: 25px; border-radius: 15px; display: none; border: 2px solid #eee; }
+        .status-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .status-label { font-size: 1.3rem; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; margin-top: 10px; }
+        th, td { padding: 12px; border-bottom: 1px solid #f0f0f0; text-align: center; font-size: 0.9rem; }
+        th { background: #f8f9fa; color: #666; }
+        .advice-box { margin-top: 20px; padding: 15px; background: rgba(0,0,0,0.04); border-radius: 8px; font-style: italic; border-right: 4px solid var(--primary); line-height: 1.6; }
+        /* States */
+        .safe { border-color: var(--success); background: #f1fcf4; }
+        .warn { border-color: var(--warning); background: #fffdf5; }
+        .risk { border-color: var(--danger); background: #fffafa; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="header">
+        <h2 style="margin:0;">المستشار الهندسي لدلائل المصاعد v15.3 🏗️</h2>
+        <small>مطابق للكود - إدخال البيانات بوحدات القياس الميدانية (سم)</small>
+    </div>
+
+    <div class="content">
+        <div class="input-grid">
+            <div class="group">
+                <label>نوع المصعد</label>
+                <select id="elevatorType">
+                    <option value="8">ركاب (إزاحة b/8)</option>
+                    <option value="4">بضائع (إزاحة b/4)</option>
+                </select>
+            </div>
+            <div class="group">
+                <label>نوع البراشوت</label>
+                <select id="safetyType">
+                    <option value="2">تدريجي (k=2)</option>
+                    <option value="3">لحظي ببكر مسنن (k=3)</option>
+                    <option value="5">لحظي (k=5)</option>
+                </select>
+            </div>
+            <div class="group">
+                <label>مقاس الدليل</label>
+                <select id="railType">
+                    <option value="T70">T70 (70x65x9)</option>
+                    <option value="T75">T75 (75x62x10)</option>
+                    <option value="T82">T82 (82x68x9)</option>
+                    <option value="T89" selected>T89 (89x62x16)</option>
+                    <option value="T125">T125 (127x89x16)</option>
+                </select>
+            </div>
+            <div class="group"><label>الحمولة Q (كجم)</label><input type="number" id="loadQ" value="800"></div>
+            <div class="group"><label>عمق الكابينة (سم)</label><input type="number" id="depth" value="140"></div>
+            <div class="group"><label>مسافة التثبيت Span (سم)</label><input type="number" id="spanCm" value="150" placeholder="مثلاً: 150"></div>
+        </div>
+
+        <button onclick="masterAnalysis()">تحليل ومطابقة الكود</button>
+
+        <div id="resCard" class="result-card">
+            <div class="status-header">
+                <span id="resStatus" class="status-label"></span>
+                <span id="resTag" style="padding:5px 15px; border-radius:20px; color:white; font-size:0.8rem;"></span>
+            </div>
+            <table>
+                <thead><tr><th>الحالة</th><th>معامل الصدمة</th><th>الإجهاد (N/mm²)</th><th>الانحناء (mm)</th></tr></thead>
+                <tbody id="resTableBody"></tbody>
+            </table>
+            <div id="resAdvice" class="advice-box"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+const railsDB = {
+    "T70":  { area: 940,  wy: 5900,  iy: 192000, imin: 14.3 },
+    "T75":  { area: 1170, wy: 9290,  iy: 403000, imin: 18.9 },
+    "T82":  { area: 1090, wy: 8060,  iy: 304000, imin: 16.7 },
+    "T89":  { area: 1570, wy: 11800, iy: 525000, imin: 18.3 },
+    "T125": { area: 2250, wy: 24200, iy: 1510000, imin: 25.9 }
+};
+
+function masterAnalysis() {
+    const Q = parseFloat(document.getElementById('loadQ').value);
+    const P = Q * 0.75;
+    const depth = parseFloat(document.getElementById('depth').value);
+    const spanMm = parseFloat(document.getElementById('spanCm').value) * 10; // تحويل من سم إلى ملم
+    const rail = railsDB[document.getElementById('railType').value];
+    const armFactor = parseFloat(document.getElementById('elevatorType').value);
+    const kSafety = parseFloat(document.getElementById('safetyType').value);
+    
+    const h = 2.9; // المسافة الرأسية بين الكراسي (متر)
+    const xQ = (depth / armFactor) / 100; // ذراع العزم (متر)
+
+    function calculateFor(k) {
+        const Fk = (k * 9.81 * (Q + P)) / 2;
+        const Fx = (k * 9.81 * (Q * xQ)) / (2 * h);
+        const stress = ((3 * Fx * spanMm / 16) / rail.wy) + (Fk / rail.area);
+        const def = (0.7 * Fx * Math.pow(spanMm, 3)) / (48 * 210000 * rail.iy);
+        return { stress, def };
+    }
+
+    const normal = calculateFor(1.2);
+    const safety = calculateFor(kSafety);
+
+    const card = document.getElementById('resCard');
+    card.style.display = "block";
+    
+    document.getElementById('resTableBody').innerHTML = `
+        <tr><td>وضع طبيعي</td><td>1.2</td><td>${normal.stress.toFixed(1)}</td><td>${normal.def.toFixed(2)}</td></tr>
+        <tr style="font-weight:bold; color:var(--primary);"><td>وضع البراشوت</td><td>${kSafety}</td><td>${safety.stress.toFixed(1)}</td><td>${safety.def.toFixed(2)}</td></tr>
+    `;
+
+    let state = "safe";
+    if (safety.stress > 165 || safety.def > 5) state = "risk";
+    else if (safety.stress > 140 || safety.def > 4 || normal.def > 1) state = "warn";
+
+    const statusObj = {
+        "safe": { text: "آمن ومطابق تماماً", tag: "ممتاز", color: "var(--success)", advice: "التصميم متوافق مع الكود. المسافات المختارة توفر ثباتاً ممتازاً للكابينة." },
+        "warn": { text: "منطقة تحذير (أصفر)", tag: "حذر", color: "var(--warning)", advice: "النتائج ضمن الحدود الكودية، ولكن يفضل تقليل مسافة التثبيت (بضعة سنتيمترات) لضمان جودة ركوب أعلى وتقليل الاهتزاز." },
+        "risk": { text: "غير مطابق - خطر ⚠️", tag: "مرفوض", color: "var(--danger)", advice: "الإجهاد أو الانحناء يتجاوز المسموح. يجب تكبير مقاس الدليل أو تقليل مسافة التثبيت (Span) فوراً." }
+    };
+
+    card.className = `result-card ${state}`;
+    document.getElementById('resStatus').innerText = statusObj[state].text;
+    document.getElementById('resTag').innerText = statusObj[state].tag;
+    document.getElementById('resTag').style.backgroundColor = statusObj[state].color;
+    document.getElementById('resAdvice').innerText = "نصيحة المهندس: " + statusObj[state].advice;
+}
+</script>
+</body>
+</html>
